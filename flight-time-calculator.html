@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flight Time Calculator — Estimate flight duration between any two airports</title>
+<meta name="description" content="Calculate estimated flight time and distance between any two airports in the world, based on great-circle distance.">
+<style>
+  :root{
+    --bg-0:#0B1220;
+    --bg-1:#141D30;
+    --panel:#182238;
+    --panel-2:#1E2A44;
+    --line:#2A374F;
+    --amber:#F5A623;
+    --amber-dim:#8A6A2E;
+    --green:#4ADE80;
+    --text:#E8EDF4;
+    --text-dim:#8B98AC;
+    --text-faint:#5B6B85;
+    --mono:'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg-0);
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(245,166,35,0.05), transparent 45%),
+      radial-gradient(circle at 85% 90%, rgba(74,222,128,0.04), transparent 45%);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    padding:0 20px 60px;
+  }
+  @font-face{
+    font-family:'IBM Plex Mono';
+    src:local('IBM Plex Mono');
+  }
+  a{color:var(--amber);text-decoration:none;}
+  .wrap{max-width:760px;margin:0 auto;}
+  header{
+    padding:36px 0 24px;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    border-bottom:1px solid var(--line);
+  }
+  .brand{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+  }
+  .brand .mark{
+    font-family:var(--mono);
+    color:var(--amber);
+    font-size:13px;
+    letter-spacing:2px;
+    border:1px solid var(--amber-dim);
+    padding:3px 7px;
+    border-radius:3px;
+  }
+  h1{
+    font-size:19px;
+    font-weight:500;
+    margin:0;
+    letter-spacing:0.2px;
+  }
+  .tagline{
+    font-size:12px;
+    color:var(--text-faint);
+    font-family:var(--mono);
+  }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:6px;
+    margin-top:28px;
+    overflow:hidden;
+  }
+  .panel-strip{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:9px 16px;
+    background:var(--panel-2);
+    border-bottom:1px solid var(--line);
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-faint);
+    letter-spacing:1px;
+  }
+  .panel-strip .dot{
+    width:6px;height:6px;border-radius:50%;
+    background:var(--green);
+    display:inline-block;
+    margin-right:6px;
+    box-shadow:0 0 4px var(--green);
+  }
+
+  .inputs{
+    padding:22px 20px 18px;
+    display:grid;
+    grid-template-columns:1fr auto 1fr;
+    gap:14px;
+    align-items:end;
+  }
+  .field{position:relative;}
+  .field label{
+    display:block;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    color:var(--text-faint);
+    margin-bottom:7px;
+    font-family:var(--mono);
+  }
+  .field input{
+    width:100%;
+    background:var(--bg-1);
+    border:1px solid var(--line);
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:15px;
+    padding:10px 12px;
+    border-radius:4px;
+    outline:none;
+    letter-spacing:0.5px;
+  }
+  .field input::placeholder{color:var(--text-faint);}
+  .field input:focus{border-color:var(--amber-dim);}
+  .swap{
+    font-family:var(--mono);
+    color:var(--text-dim);
+    background:var(--bg-1);
+    border:1px solid var(--line);
+    border-radius:4px;
+    width:38px;height:38px;
+    cursor:pointer;
+    font-size:16px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .swap:hover{color:var(--amber);border-color:var(--amber-dim);}
+
+  .suggest{
+    position:absolute;
+    top:100%;left:0;right:0;
+    background:var(--bg-1);
+    border:1px solid var(--line);
+    border-top:none;
+    border-radius:0 0 4px 4px;
+    max-height:220px;
+    overflow-y:auto;
+    z-index:10;
+    display:none;
+  }
+  .suggest.open{display:block;}
+  .suggest-item{
+    padding:9px 12px;
+    cursor:pointer;
+    font-size:13px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .suggest-item:last-child{border-bottom:none;}
+  .suggest-item:hover, .suggest-item.active{background:var(--panel-2);}
+  .suggest-item .code{font-family:var(--mono);color:var(--amber);font-size:12px;}
+  .suggest-item .name{color:var(--text-dim);font-size:12px;text-align:right;}
+
+  .compute-row{
+    padding:0 20px 22px;
+  }
+  button.go{
+    width:100%;
+    background:var(--amber);
+    color:#241a05;
+    border:none;
+    font-family:var(--mono);
+    font-weight:600;
+    font-size:13px;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    padding:12px;
+    border-radius:4px;
+    cursor:pointer;
+  }
+  button.go:hover{background:#ffb733;}
+  button.go:disabled{background:var(--line);color:var(--text-faint);cursor:not-allowed;}
+
+  .readout{
+    border-top:1px solid var(--line);
+    display:none;
+  }
+  .readout.open{display:block;}
+  .readout-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    border-bottom:1px solid var(--line);
+  }
+  .readout-cell{
+    padding:18px 16px;
+    border-right:1px solid var(--line);
+  }
+  .readout-cell:last-child{border-right:none;}
+  .readout-cell .label{
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    color:var(--text-faint);
+    font-family:var(--mono);
+    margin-bottom:8px;
+  }
+  .readout-cell .value{
+    font-family:var(--mono);
+    font-size:22px;
+    color:var(--amber);
+    font-weight:600;
+  }
+  .readout-cell .sub{
+    font-size:11px;
+    color:var(--text-dim);
+    margin-top:4px;
+    font-family:var(--mono);
+  }
+
+  .route-viz{
+    padding:20px;
+  }
+  .route-viz svg{width:100%;height:auto;display:block;}
+  .route-label{
+    font-family:var(--mono);
+    font-size:11px;
+    fill:var(--text-dim);
+  }
+  .route-code{
+    font-family:var(--mono);
+    font-size:13px;
+    font-weight:600;
+    fill:var(--amber);
+  }
+
+  .note{
+    padding:14px 20px 20px;
+    font-size:12px;
+    color:var(--text-faint);
+    line-height:1.6;
+    border-top:1px solid var(--line);
+  }
+  .note b{color:var(--text-dim);font-weight:500;}
+
+  .error{
+    padding:14px 20px;
+    font-size:13px;
+    color:#F09595;
+    font-family:var(--mono);
+    display:none;
+  }
+  .error.open{display:block;}
+
+  footer{
+    margin-top:30px;
+    text-align:center;
+    font-size:11px;
+    color:var(--text-faint);
+    font-family:var(--mono);
+  }
+
+  @media (max-width:520px){
+    .inputs{grid-template-columns:1fr;}
+    .swap{justify-self:center;transform:rotate(90deg);}
+    .readout-grid{grid-template-columns:1fr;}
+    .readout-cell{border-right:none;border-bottom:1px solid var(--line);}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <span class="mark">FLT/TIME</span>
+      <div>
+        <h1>Flight time calculator</h1>
+        <div class="tagline">great-circle distance &amp; duration estimator</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="panel">
+    <div class="panel-strip">
+      <span><span class="dot"></span>READY</span>
+      <span id="db-count">— airports loaded</span>
+    </div>
+
+    <div class="inputs">
+      <div class="field">
+        <label for="origin">From</label>
+        <input type="text" id="origin" placeholder="City or airport code" autocomplete="off">
+        <div class="suggest" id="origin-suggest"></div>
+      </div>
+      <button class="swap" id="swap-btn" title="Swap" aria-label="Swap origin and destination">⇄</button>
+      <div class="field">
+        <label for="dest">To</label>
+        <input type="text" id="dest" placeholder="City or airport code" autocomplete="off">
+        <div class="suggest" id="dest-suggest"></div>
+      </div>
+    </div>
+
+    <div class="error" id="error-box"></div>
+
+    <div class="compute-row">
+      <button class="go" id="go-btn">Calculate flight time</button>
+    </div>
+
+    <div class="readout" id="readout">
+      <div class="readout-grid">
+        <div class="readout-cell">
+          <div class="label">Flight time</div>
+          <div class="value" id="out-time">—</div>
+          <div class="sub" id="out-time-sub">block time estimate</div>
+        </div>
+        <div class="readout-cell">
+          <div class="label">Distance</div>
+          <div class="value" id="out-dist">—</div>
+          <div class="sub" id="out-dist-sub">great-circle</div>
+        </div>
+        <div class="readout-cell">
+          <div class="label">Time zones</div>
+          <div class="value" id="out-tz">—</div>
+          <div class="sub" id="out-tz-sub">approx. offset</div>
+        </div>
+      </div>
+
+      <div class="route-viz">
+        <svg id="route-svg" viewBox="0 0 720 260" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+
+      <div class="note">
+        <b>How this is calculated:</b> distance is the great-circle path between the two airports' coordinates. Flight time assumes an average commercial jet cruising speed of ~900 km/h (560 mph), plus a fixed ~30 minute allowance for taxi, takeoff, climb, descent, and landing. Actual flight time varies with aircraft type, route, wind, and air traffic — treat this as a planning estimate, not a booking guarantee.
+      </div>
+    </div>
+  </div>
+
+  <footer>estimates only · not affiliated with any airline or booking service</footer>
+</div>
+
+<script>
+// Airport database: [IATA, name, city, country, lat, lon]
+const AIRPORTS = [
+["JFK","John F. Kennedy Intl","New York","USA",40.6413,-73.7781],
+["LGA","LaGuardia","New York","USA",40.7769,-73.8740],
+["EWR","Newark Liberty Intl","Newark","USA",40.6895,-74.1745],
+["LAX","Los Angeles Intl","Los Angeles","USA",33.9416,-118.4085],
+["ORD","O'Hare Intl","Chicago","USA",41.9742,-87.9073],
+["DFW","Dallas/Fort Worth Intl","Dallas","USA",32.8998,-97.0403],
+["DEN","Denver Intl","Denver","USA",39.8561,-104.6737],
+["SFO","San Francisco Intl","San Francisco","USA",37.6213,-122.3790],
+["SEA","Seattle-Tacoma Intl","Seattle","USA",47.4502,-122.3088],
+["MIA","Miami Intl","Miami","USA",25.7959,-80.2870],
+["ATL","Hartsfield-Jackson Atlanta Intl","Atlanta","USA",33.6407,-84.4277],
+["BOS","Logan Intl","Boston","USA",42.3656,-71.0096],
+["IAH","George Bush Intercontinental","Houston","USA",29.9902,-95.3368],
+["PHX","Sky Harbor Intl","Phoenix","USA",33.4352,-112.0101],
+["LAS","Harry Reid Intl","Las Vegas","USA",36.0840,-115.1537],
+["MCO","Orlando Intl","Orlando","USA",28.4312,-81.3081],
+["CLT","Charlotte Douglas Intl","Charlotte","USA",35.2144,-80.9473],
+["MSP","Minneapolis-St Paul Intl","Minneapolis","USA",44.8848,-93.2223],
+["DTW","Detroit Metro","Detroit","USA",42.2124,-83.3534],
+["PHL","Philadelphia Intl","Philadelphia","USA",39.8744,-75.2424],
+["YYZ","Toronto Pearson Intl","Toronto","Canada",43.6777,-79.6248],
+["YVR","Vancouver Intl","Vancouver","Canada",49.1967,-123.1815],
+["YUL","Montreal-Trudeau Intl","Montreal","Canada",45.4706,-73.7408],
+["MEX","Mexico City Intl","Mexico City","Mexico",19.4363,-99.0721],
+["GRU","Guarulhos Intl","Sao Paulo","Brazil",-23.4356,-46.4731],
+["GIG","Rio de Janeiro-Galeao Intl","Rio de Janeiro","Brazil",-22.8100,-43.2506],
+["EZE","Ministro Pistarini Intl","Buenos Aires","Argentina",-34.8222,-58.5358],
+["SCL","Arturo Merino Benitez Intl","Santiago","Chile",-33.3930,-70.7858],
+["BOG","El Dorado Intl","Bogota","Colombia",4.7016,-74.1469],
+["LIM","Jorge Chavez Intl","Lima","Peru",-12.0219,-77.1143],
+["LHR","Heathrow","London","UK",51.4700,-0.4543],
+["LGW","Gatwick","London","UK",51.1537,-0.1821],
+["CDG","Charles de Gaulle","Paris","France",49.0097,2.5479],
+["ORY","Orly","Paris","France",48.7233,2.3794],
+["FRA","Frankfurt am Main","Frankfurt","Germany",50.0379,8.5622],
+["MUC","Munich","Munich","Germany",48.3538,11.7861],
+["AMS","Amsterdam Schiphol","Amsterdam","Netherlands",52.3105,4.7683],
+["MAD","Adolfo Suarez Madrid-Barajas","Madrid","Spain",40.4936,-3.5668],
+["BCN","Barcelona-El Prat","Barcelona","Spain",41.2974,2.0833],
+["FCO","Leonardo da Vinci-Fiumicino","Rome","Italy",41.8003,12.2389],
+["MXP","Milan Malpensa","Milan","Italy",45.6306,8.7281],
+["ZRH","Zurich","Zurich","Switzerland",47.4647,8.5492],
+["VIE","Vienna Intl","Vienna","Austria",48.1103,16.5697],
+["CPH","Copenhagen","Copenhagen","Denmark",55.6180,12.6560],
+["OSL","Oslo Gardermoen","Oslo","Norway",60.1976,11.1004],
+["ARN","Stockholm Arlanda","Stockholm","Sweden",59.6519,17.9186],
+["HEL","Helsinki Vantaa","Helsinki","Finland",60.3172,24.9633],
+["DUB","Dublin","Dublin","Ireland",53.4213,-6.2701],
+["LIS","Humberto Delgado","Lisbon","Portugal",38.7756,-9.1354],
+["ATH","Athens Intl","Athens","Greece",37.9364,23.9445],
+["IST","Istanbul","Istanbul","Turkey",41.2753,28.7519],
+["SVO","Sheremetyevo","Moscow","Russia",55.9736,37.4125],
+["WAW","Warsaw Chopin","Warsaw","Poland",52.1657,20.9671],
+["PRG","Vaclav Havel","Prague","Czechia",50.1008,14.2600],
+["BUD","Budapest Ferenc Liszt","Budapest","Hungary",47.4298,19.2611],
+["BRU","Brussels","Brussels","Belgium",50.9014,4.4844],
+["JNB","O.R. Tambo Intl","Johannesburg","South Africa",-26.1392,28.2460],
+["CPT","Cape Town Intl","Cape Town","South Africa",-33.9715,18.6021],
+["CAI","Cairo Intl","Cairo","Egypt",30.1219,31.4056],
+["NBO","Jomo Kenyatta Intl","Nairobi","Kenya",-1.3192,36.9278],
+["LOS","Murtala Muhammed Intl","Lagos","Nigeria",6.5774,3.3212],
+["ADD","Bole Intl","Addis Ababa","Ethiopia",8.9779,38.7993],
+["CMN","Mohammed V Intl","Casablanca","Morocco",33.3675,-7.5900],
+["DXB","Dubai Intl","Dubai","UAE",25.2532,55.3657],
+["AUH","Abu Dhabi Intl","Abu Dhabi","UAE",24.4330,54.6511],
+["DOH","Hamad Intl","Doha","Qatar",25.2731,51.6081],
+["RUH","King Khalid Intl","Riyadh","Saudi Arabia",24.9576,46.6988],
+["JED","King Abdulaziz Intl","Jeddah","Saudi Arabia",21.6796,39.1565],
+["TLV","Ben Gurion","Tel Aviv","Israel",32.0114,34.8867],
+["AMM","Queen Alia Intl","Amman","Jordan",31.7226,35.9932],
+["DEL","Indira Gandhi Intl","Delhi","India",28.5562,77.1000],
+["BOM","Chhatrapati Shivaji Intl","Mumbai","India",19.0896,72.8656],
+["BLR","Kempegowda Intl","Bengaluru","India",13.1986,77.7066],
+["MAA","Chennai Intl","Chennai","India",12.9941,80.1709],
+["CCU","Netaji Subhas Chandra Bose Intl","Kolkata","India",22.6547,88.4467],
+["KTM","Tribhuvan Intl","Kathmandu","Nepal",27.6966,85.3591],
+["DAC","Hazrat Shahjalal Intl","Dhaka","Bangladesh",23.8433,90.3978],
+["CMB","Bandaranaike Intl","Colombo","Sri Lanka",7.1808,79.8841],
+["KHI","Jinnah Intl","Karachi","Pakistan",24.9065,67.1608],
+["ISB","Islamabad Intl","Islamabad","Pakistan",33.5490,72.8250],
+["BKK","Suvarnabhumi","Bangkok","Thailand",13.6900,100.7501],
+["SIN","Changi","Singapore","Singapore",1.3644,103.9915],
+["KUL","Kuala Lumpur Intl","Kuala Lumpur","Malaysia",2.7456,101.7099],
+["CGK","Soekarno-Hatta Intl","Jakarta","Indonesia",-6.1256,106.6559],
+["DPS","Ngurah Rai Intl","Denpasar (Bali)","Indonesia",-8.7482,115.1672],
+["MNL","Ninoy Aquino Intl","Manila","Philippines",14.5086,121.0198],
+["SGN","Tan Son Nhat Intl","Ho Chi Minh City","Vietnam",10.8188,106.6520],
+["HAN","Noi Bai Intl","Hanoi","Vietnam",21.2212,105.8072],
+["PNH","Phnom Penh Intl","Phnom Penh","Cambodia",11.5466,104.8443],
+["RGN","Yangon Intl","Yangon","Myanmar",16.9073,96.1332],
+["HKG","Hong Kong Intl","Hong Kong","China",22.3080,113.9185],
+["PVG","Shanghai Pudong Intl","Shanghai","China",31.1443,121.8083],
+["PEK","Beijing Capital Intl","Beijing","China",40.0799,116.6031],
+["PKX","Beijing Daxing Intl","Beijing","China",39.5098,116.4105],
+["CAN","Guangzhou Baiyun Intl","Guangzhou","China",23.3924,113.2988],
+["SZX","Shenzhen Bao'an Intl","Shenzhen","China",22.6393,113.8107],
+["CTU","Chengdu Shuangliu Intl","Chengdu","China",30.5785,103.9471],
+["TPE","Taiwan Taoyuan Intl","Taipei","Taiwan",25.0797,121.2342],
+["ICN","Incheon Intl","Seoul","South Korea",37.4602,126.4407],
+["GMP","Gimpo Intl","Seoul","South Korea",37.5583,126.7906],
+["NRT","Narita Intl","Tokyo","Japan",35.7647,140.3864],
+["HND","Haneda","Tokyo","Japan",35.5494,139.7798],
+["KIX","Kansai Intl","Osaka","Japan",34.4347,135.2441],
+["NGO","Chubu Centrair Intl","Nagoya","Japan",34.8584,136.8054],
+["FUK","Fukuoka","Fukuoka","Japan",33.5859,130.4507],
+["CTS","New Chitose","Sapporo","Japan",42.7752,141.6923],
+["SYD","Sydney Kingsford Smith","Sydney","Australia",-33.9399,151.1753],
+["MEL","Melbourne","Melbourne","Australia",-37.6733,144.8433],
+["BNE","Brisbane","Brisbane","Australia",-27.3842,153.1175],
+["PER","Perth","Perth","Australia",-31.9403,115.9669],
+["ADL","Adelaide","Adelaide","Australia",-34.9450,138.5306],
+["AKL","Auckland","Auckland","New Zealand",-37.0082,174.7850],
+["CHC","Christchurch","Christchurch","New Zealand",-43.4894,172.5320],
+["NAN","Nadi Intl","Nadi","Fiji",-17.7554,177.4434],
+["HNL","Daniel K. Inouye Intl","Honolulu","USA",21.3245,-157.9251],
+["ANC","Ted Stevens Anchorage Intl","Anchorage","USA",61.1743,-149.9963],
+["YYC","Calgary Intl","Calgary","Canada",51.1315,-114.0106],
+["REK","Keflavik Intl","Reykjavik","Iceland",63.9850,-22.6056],
+["OPO","Francisco Sa Carneiro","Porto","Portugal",41.2481,-8.6814],
+["NCE","Cote d'Azur","Nice","France",43.6584,7.2159],
+["GVA","Geneva","Geneva","Switzerland",46.2381,6.1090],
+["MAN","Manchester","Manchester","UK",53.3537,-2.2750],
+["EDI","Edinburgh","Edinburgh","UK",55.9500,-3.3725],
+["KEF","Keflavik Intl","Reykjavik","Iceland",63.9850,-22.6056],
+["TXL","Berlin Brandenburg","Berlin","Germany",52.3667,13.5033],
+["DUS","Dusseldorf","Dusseldorf","Germany",51.2895,6.7668],
+["HAM","Hamburg","Hamburg","Germany",53.6304,9.9882]
+];
+
+let ORIGIN = null;
+let DEST = null;
+
+document.getElementById('db-count').textContent = AIRPORTS.length + ' airports loaded';
+
+function norm(s){ return s.toLowerCase().trim(); }
+
+function search(query){
+  const q = norm(query);
+  if(!q) return [];
+  return AIRPORTS.filter(a=>{
+    return norm(a[0])===q ||
+      norm(a[0]).startsWith(q) ||
+      norm(a[2]).includes(q) ||
+      norm(a[1]).includes(q) ||
+      norm(a[3]).includes(q);
+  }).sort((a,b)=>{
+    const aExact = norm(a[0])===q ? 0 : 1;
+    const bExact = norm(b[0])===q ? 0 : 1;
+    return aExact-bExact;
+  }).slice(0,8);
+}
+
+function setupField(inputId, suggestId, onPick){
+  const input = document.getElementById(inputId);
+  const suggest = document.getElementById(suggestId);
+
+  input.addEventListener('input', ()=>{
+    const results = search(input.value);
+    if(results.length===0){ suggest.classList.remove('open'); return; }
+    suggest.innerHTML = results.map(a=>
+      `<div class="suggest-item" data-code="${a[0]}">
+        <span><span class="code">${a[0]}</span> ${a[2]}</span>
+        <span class="name">${a[1]}, ${a[3]}</span>
+      </div>`
+    ).join('');
+    suggest.classList.add('open');
+    suggest.querySelectorAll('.suggest-item').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        const code = el.getAttribute('data-code');
+        const airport = AIRPORTS.find(a=>a[0]===code);
+        input.value = `${airport[2]} (${airport[0]})`;
+        suggest.classList.remove('open');
+        onPick(airport);
+      });
+    });
+  });
+
+  input.addEventListener('blur', ()=>{
+    setTimeout(()=>suggest.classList.remove('open'), 150);
+  });
+}
+
+setupField('origin','origin-suggest', a=>{ ORIGIN = a; });
+setupField('dest','dest-suggest', a=>{ DEST = a; });
+
+document.getElementById('swap-btn').addEventListener('click', ()=>{
+  const oInput = document.getElementById('origin');
+  const dInput = document.getElementById('dest');
+  const tmpVal = oInput.value; oInput.value = dInput.value; dInput.value = tmpVal;
+  const tmpAir = ORIGIN; ORIGIN = DEST; DEST = tmpAir;
+});
+
+function toRad(deg){ return deg * Math.PI/180; }
+
+function greatCircleKm(lat1, lon1, lat2, lon2){
+  const R = 6371;
+  const dLat = toRad(lat2-lat1);
+  const dLon = toRad(lon2-lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R*c;
+}
+
+function formatDuration(totalMinutes){
+  const h = Math.floor(totalMinutes/60);
+  const m = Math.round(totalMinutes%60);
+  return `${h}h ${m.toString().padStart(2,'0')}m`;
+}
+
+function showError(msg){
+  const box = document.getElementById('error-box');
+  box.textContent = msg;
+  box.classList.add('open');
+  document.getElementById('readout').classList.remove('open');
+}
+function clearError(){
+  document.getElementById('error-box').classList.remove('open');
+}
+
+function drawRoute(origin, dest, distanceKm){
+  const svg = document.getElementById('route-svg');
+  const w = 720, h = 260;
+  const pad = 60;
+
+  const lons = [origin[5], dest[5]];
+  const lats = [origin[4], dest[4]];
+  let minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  let minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const lonSpan = Math.max(maxLon-minLon, 20);
+  const latSpan = Math.max(maxLat-minLat, 20);
+  minLon -= lonSpan*0.15; maxLon += lonSpan*0.15;
+  minLat -= latSpan*0.15; maxLat += latSpan*0.15;
+
+  function project(lat, lon){
+    const x = pad + ((lon-minLon)/(maxLon-minLon))*(w-2*pad);
+    const y = h-pad - ((lat-minLat)/(maxLat-minLat))*(h-2*pad);
+    return [x,y];
+  }
+
+  const [x1,y1] = project(origin[4], origin[5]);
+  const [x2,y2] = project(dest[4], dest[5]);
+  const midX = (x1+x2)/2;
+  const midY = Math.min(y1,y2) - 50;
+
+  svg.innerHTML = `
+    <line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}" stroke="#2A374F" stroke-width="1" stroke-dasharray="2,4" opacity="0"/>
+    <path d="M ${x1} ${y1} Q ${midX} ${midY} ${x2} ${y2}" fill="none" stroke="#F5A623" stroke-width="1.5" stroke-dasharray="5,4"/>
+    <circle cx="${x1}" cy="${y1}" r="4" fill="#4ADE80"/>
+    <circle cx="${x2}" cy="${y2}" r="4" fill="#4ADE80"/>
+    <text x="${x1}" y="${y1-14}" text-anchor="middle" class="route-code">${origin[0]}</text>
+    <text x="${x1}" y="${y1+22}" text-anchor="middle" class="route-label">${origin[2]}</text>
+    <text x="${x2}" y="${y2-14}" text-anchor="middle" class="route-code">${dest[0]}</text>
+    <text x="${x2}" y="${y2+22}" text-anchor="middle" class="route-label">${dest[2]}</text>
+    <text x="${midX}" y="${Math.min(midY+18, (y1+y2)/2 - 10)}" text-anchor="middle" class="route-label">${Math.round(distanceKm).toLocaleString()} km</text>
+  `;
+}
+
+document.getElementById('go-btn').addEventListener('click', ()=>{
+  clearError();
+
+  if(!ORIGIN){
+    const val = document.getElementById('origin').value;
+    const results = search(val);
+    if(results.length>0) ORIGIN = results[0];
+  }
+  if(!DEST){
+    const val = document.getElementById('dest').value;
+    const results = search(val);
+    if(results.length>0) DEST = results[0];
+  }
+
+  if(!ORIGIN || !DEST){
+    showError('Enter a valid origin and destination airport.');
+    return;
+  }
+  if(ORIGIN[0]===DEST[0]){
+    showError('Origin and destination must be different airports.');
+    return;
+  }
+
+  const distKm = greatCircleKm(ORIGIN[4], ORIGIN[5], DEST[4], DEST[5]);
+  const distMi = distKm * 0.621371;
+
+  const cruiseSpeedKmh = 900;
+  const groundBufferMin = 30;
+  const flightMinutes = (distKm/cruiseSpeedKmh)*60 + groundBufferMin;
+
+  const lonDiff = Math.abs(ORIGIN[5]-DEST[5]);
+  const approxTzDiff = Math.round(lonDiff/15);
+
+  document.getElementById('out-time').textContent = formatDuration(flightMinutes);
+  document.getElementById('out-dist').textContent = Math.round(distKm).toLocaleString()+' km';
+  document.getElementById('out-dist-sub').textContent = Math.round(distMi).toLocaleString()+' mi';
+  document.getElementById('out-tz').textContent = '~'+approxTzDiff+' hr'+(approxTzDiff===1?'':'s');
+
+  drawRoute(ORIGIN, DEST, distKm);
+
+  document.getElementById('readout').classList.add('open');
+});
+
+document.getElementById('origin').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ document.getElementById('dest').focus(); }
+});
+document.getElementById('dest').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ document.getElementById('go-btn').click(); }
+});
+</script>
+</body>
+</html>
